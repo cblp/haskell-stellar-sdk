@@ -60,7 +60,7 @@ data Account = Account
     }
     deriving (Show)
 
--- TODO(2022-110-26, cblp) rename to Account;
+-- TODO(2022-11-26, cblp) rename to AccountId;
 -- introduce Address = Account | Muxed | Federal
 newtype Address = Address Text
     deriving newtype

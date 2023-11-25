@@ -1,0 +1,22 @@
+Account
+    publicKey   Text    -- Text-encoded Stellar account id (public key)
+    xlmBalance  Text Maybe  -- raw decimal number,
+                            -- null means account doesn't exist on chain
+    --
+    UniqueAccount publicKey
+    --
+    deriving Show
+
+Asset
+    code    Text
+    issuer  Text
+    --
+    Primary code issuer
+
+AssetBalance
+    account     AccountId
+    assetCode   Text
+    assetIssuer Text
+    balance     Text
+    --
+    Primary account assetCode assetIssuer
