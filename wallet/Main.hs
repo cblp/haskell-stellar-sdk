@@ -1,11 +1,19 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Options.Generic
+import Data.Function ((&))
+import Data.Text (Text)
+import Options.Generic (Generic, ParseRecord, getRecord)
+import Stellar.Simple (
+    Address (Address),
+    Asset,
+    op_changeTrust,
+    transactionBuilder,
+ )
 
--- import Stellar.Simple
-
-data Options = Trust{account :: Text, asset :: Text} | Pay
+data Options = Trust {account :: Text, asset :: Text} | Pay
     deriving (Generic, Show)
 
 instance ParseRecord Options
@@ -13,4 +21,14 @@ instance ParseRecord Options
 main :: IO ()
 main = do
     options <- getRecord "Simple CLI Stellar wallet"
-    print (options :: Options)
+    exec options
+
+exec :: Options -> IO ()
+exec = \case
+    Trust{account, asset} -> execTrust (Address account) (_ asset)
+    Pay -> undefined
+
+execTrust :: Address -> Asset -> IO ()
+execTrust account asset = do
+    let txb = transactionBuilder account & op_changeTrust asset
+    _
