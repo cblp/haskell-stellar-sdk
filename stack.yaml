@@ -1,4 +1,4 @@
-resolver: lts-19.30
+resolver: lts-20.26
 
 packages:
   - .
@@ -6,4 +6,6 @@ packages:
   - wallet
 
 extra-deps:
+  - git: https://github.com/TomMD/cipher-aes128.git
+    commit: 6f634f6c1ecb2b4173dbe4f46d269ee612c68840  # master 2022-11-16
   - DRBG-0.5.5
