@@ -1,4 +1,4 @@
--- |Cabal utilities for XDR processing.
+-- | Cabal utilities for XDR processing.
 module Network.ONCRPC.XDR.Cabal
   ( ppRPCGenSuffixHandler
   ) where
@@ -49,6 +49,7 @@ ppRPCGen :: BuildInfo -> LocalBuildInfo -> ComponentLocalBuildInfo -> PreProcess
 ppRPCGen bi _ _ = PreProcessor
   { platformIndependent = True
   , runPreProcessor = runRPCGen $ mapMaybe ppRPCGenCustomField $ customFieldsBI bi
+  , ppOrdering = undefined
   }
 
 -- |Pre-processor for hsrpcgen.
