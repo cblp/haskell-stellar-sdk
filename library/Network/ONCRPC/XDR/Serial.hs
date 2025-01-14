@@ -94,11 +94,11 @@ class (XDR a, Enum a) => XDREnum a where
 
 instance XDREnum XDR.Int where
   xdrFromEnum = id
-  xdrToEnum = return
+  xdrToEnum = pure
 
 instance XDREnum XDR.UnsignedInt where
   xdrFromEnum = fromIntegral
-  xdrToEnum = return . fromIntegral
+  xdrToEnum = pure . fromIntegral
 
 -- | Version of 'xdrToEnum' that fails at runtime for invalid values: @fromMaybe undefined . 'xdrToEnum'@.
 xdrToEnum' :: (XDREnum a) => XDR.Int -> a
@@ -115,8 +115,8 @@ xdrGetEnum = xdrToEnum =<< Serialize.get
 instance XDREnum XDR.Bool where
   xdrFromEnum False = 0
   xdrFromEnum True = 1
-  xdrToEnum 0 = return False
-  xdrToEnum 1 = return True
+  xdrToEnum 0 = pure False
+  xdrToEnum 1 = pure True
   xdrToEnum _ = fail "invalid bool"
 
 -- | An XDR type defined with \"union\"
@@ -147,32 +147,32 @@ instance (XDR a) => XDR (XDR.Optional a) where
 
 instance (XDR a) => XDRUnion (XDR.Optional a) where
   type XDRDiscriminant (XDR.Optional a) = XDR.Bool
-  xdrSplitUnion Nothing = (0, return ())
+  xdrSplitUnion Nothing = (0, pure ())
   xdrSplitUnion (Just a) = (1, xdrPut a)
-  xdrGetUnionArm 0 = return Nothing
+  xdrGetUnionArm 0 = pure Nothing
   xdrGetUnionArm 1 = Just <$> xdrGet
   xdrGetUnionArm _ = fail $ "xdrGetUnion: invalid discriminant for " ++ xdrType (undefined :: XDR.Optional a)
 
 xdrPutPad :: XDR.Length -> Put
 xdrPutPad n = case n `mod` 4 of
-  0 -> return ()
+  0 -> pure ()
   1 -> Serialize.putWord16host 0 >> Serialize.putWord8 0
   2 -> Serialize.putWord16host 0
   _ {- must be 3 -} -> Serialize.putWord8 0
 
 xdrGetPad :: XDR.Length -> Get ()
 xdrGetPad n = case n `mod` 4 of
-  0 -> return ()
+  0 -> pure ()
   1 -> do
     0 <- Serialize.getWord16host
     0 <- Serialize.getWord8
-    return ()
+    pure ()
   2 -> do
     0 <- Serialize.getWord16host
-    return ()
+    pure ()
   _ {- must be 3 -} -> do
     0 <- Serialize.getWord8
-    return ()
+    pure ()
 
 bsLength :: BS.ByteString -> XDR.Length
 bsLength = fromIntegral . BS.length
@@ -187,7 +187,7 @@ xdrGetByteString :: XDR.Length -> Get BS.ByteString
 xdrGetByteString l = do
   b <- Serialize.getByteString $ fromIntegral l
   xdrGetPad l
-  return b
+  pure b
 
 fixedLength :: forall n a. (KnownNat n) => LengthArray 'EQ n a -> String -> String
 fixedLength a = (++ ('[' : show (fixedLengthArrayLength a) ++ "]"))
@@ -257,8 +257,8 @@ instance (KnownNat n) => XDR (LengthArray 'LT n BS.ByteString) where
 
 instance XDR () where
   xdrType () = "void"
-  xdrPut () = return ()
-  xdrGet = return ()
+  xdrPut () = pure ()
+  xdrGet = pure ()
 
 instance (XDR a, XDR b) => XDR (a, b) where
   xdrType (a, b) = xdrType a ++ '+' : xdrType b
