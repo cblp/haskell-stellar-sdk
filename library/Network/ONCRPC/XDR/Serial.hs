@@ -1,86 +1,96 @@
 {-# OPTIONS -Wno-orphans #-}
-
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | XDR Serialization
-module Network.ONCRPC.XDR.Serial
-  ( XDR(..)
-  , XDREnum(..)
-  , xdrToEnum'
-  , xdrPutEnum
-  , xdrGetEnum
-  , XDRUnion(..)
-  , xdrDiscriminant
-  , xdrPutUnion
-  , xdrGetUnion
+module Network.ONCRPC.XDR.Serial (
+  XDR (..),
+  XDREnum (..),
+  xdrToEnum',
+  xdrPutEnum,
+  xdrGetEnum,
+  XDRUnion (..),
+  xdrDiscriminant,
+  xdrPutUnion,
+  xdrGetUnion,
+  xdrSerialize,
+  xdrSerializeLazy,
+  xdrDeserialize,
+  xdrDeserializeLazy,
+) where
 
-  , xdrSerialize
-  , xdrSerializeLazy
-  , xdrDeserialize
-  , xdrDeserializeLazy
-  ) where
+import Control.Monad (guard, replicateM, unless)
+import Data.ByteString qualified as BS
+import Data.ByteString.Lazy qualified as BSL
+import Data.Maybe (fromJust, listToMaybe)
+import Data.Proxy (Proxy (Proxy))
+import Data.Serialize (Get, Put)
+import Data.Serialize qualified as Serialize
+import Data.Vector (Vector)
+import Data.Vector qualified as Vector
+import GHC.TypeLits (natVal)
+import Network.ONCRPC.XDR.Types qualified as XDR
 
-import           Control.Monad (guard, unless, replicateM)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
-import           Data.Maybe (fromJust)
-import           Data.Proxy (Proxy(..))
-import qualified Data.Serialize as S
-import qualified Data.Vector as V
-import qualified Network.ONCRPC.XDR.Types as XDR
-import           GHC.TypeLits (natVal)
-
-import           Network.ONCRPC.XDR.Array
+import Network.ONCRPC.XDR.Array
 
 instance MonadFail (Either String) where
   fail = Left
 
--- |An XDR type that can be (de)serialized.
+-- | An XDR type that can be (de)serialized.
 class XDR a where
-  -- |XDR identifier/type descriptor; argument value is ignored.
+  -- | XDR identifier/type descriptor; argument value is ignored.
   xdrType :: a -> String
-  xdrPut :: a -> S.Put
-  xdrGet :: S.Get a
+
+  xdrPut :: a -> Put
+
+  xdrGet :: Get a
 
 instance XDR XDR.Int where
   xdrType _ = "int"
-  xdrPut = S.putInt32be
-  xdrGet = S.getInt32be
+  xdrPut = Serialize.putInt32be
+  xdrGet = Serialize.getInt32be
+
 instance XDR XDR.UnsignedInt where
   xdrType _ = "unsigned int"
-  xdrPut = S.putWord32be
-  xdrGet = S.getWord32be
+  xdrPut = Serialize.putWord32be
+  xdrGet = Serialize.getWord32be
+
 instance XDR XDR.Hyper where
   xdrType _ = "hyper"
-  xdrPut = S.putInt64be
-  xdrGet = S.getInt64be
+  xdrPut = Serialize.putInt64be
+  xdrGet = Serialize.getInt64be
+
 instance XDR XDR.UnsignedHyper where
   xdrType _ = "unsigned hyper"
-  xdrPut = S.putWord64be
-  xdrGet = S.getWord64be
+  xdrPut = Serialize.putWord64be
+  xdrGet = Serialize.getWord64be
+
 instance XDR XDR.Float where
   xdrType _ = "float"
-  xdrPut = S.putFloat32be
-  xdrGet = S.getFloat32be
+  xdrPut = Serialize.putFloat32be
+  xdrGet = Serialize.getFloat32be
+
 instance XDR XDR.Double where
   xdrType _ = "double"
-  xdrPut = S.putFloat64be
-  xdrGet = S.getFloat64be
+  xdrPut = Serialize.putFloat64be
+  xdrGet = Serialize.getFloat64be
+
 instance XDR XDR.Bool where
   xdrType _ = "bool"
   xdrPut = xdrPutEnum
   xdrGet = xdrGetEnum
 
--- |An XDR type defined with \"enum\".
--- Note that the 'XDREnum' 'XDR.Int' value is not (necessarily) the same as the 'Enum' 'Int' value.
--- The 'Enum' instance is derived automatically to allow 'succ', etc. to work usefully in Haskell, whereas the 'XDREnum' reflects the XDR-defined values.
+{- | An XDR type defined with \"enum\".
+ Note that the 'XDREnum' 'XDR.Int' value is not (necessarily) the same as the 'Enum' 'Int' value.
+ The 'Enum' instance is derived automatically to allow 'succ', etc. to work usefully in Haskell, whereas the 'XDREnum' reflects the XDR-defined values.
+-}
 class (XDR a, Enum a) => XDREnum a where
   xdrFromEnum :: a -> XDR.Int
-  xdrToEnum :: MonadFail m => XDR.Int -> m a
+  xdrToEnum :: (MonadFail m) => XDR.Int -> m a
 
 instance XDREnum XDR.Int where
   xdrFromEnum = id
@@ -90,17 +100,17 @@ instance XDREnum XDR.UnsignedInt where
   xdrFromEnum = fromIntegral
   xdrToEnum = return . fromIntegral
 
--- |Version of 'xdrToEnum' that fails at runtime for invalid values: @fromMaybe undefined . 'xdrToEnum'@.
-xdrToEnum' :: XDREnum a => XDR.Int -> a
+-- | Version of 'xdrToEnum' that fails at runtime for invalid values: @fromMaybe undefined . 'xdrToEnum'@.
+xdrToEnum' :: (XDREnum a) => XDR.Int -> a
 xdrToEnum' = either error id . xdrToEnum
 
--- |Default implementation of 'xdrPut' for 'XDREnum'.
-xdrPutEnum :: XDREnum a => a -> S.Put
-xdrPutEnum = S.put . xdrFromEnum
+-- | Default implementation of 'xdrPut' for 'XDREnum'.
+xdrPutEnum :: (XDREnum a) => a -> Put
+xdrPutEnum = Serialize.put . xdrFromEnum
 
--- |Default implementation of 'xdrGet' for 'XDREnum'.
-xdrGetEnum :: XDREnum a => S.Get a
-xdrGetEnum = xdrToEnum =<< S.get
+-- | Default implementation of 'xdrGet' for 'XDREnum'.
+xdrGetEnum :: (XDREnum a) => Get a
+xdrGetEnum = xdrToEnum =<< Serialize.get
 
 instance XDREnum XDR.Bool where
   xdrFromEnum False = 0
@@ -109,31 +119,33 @@ instance XDREnum XDR.Bool where
   xdrToEnum 1 = return True
   xdrToEnum _ = fail "invalid bool"
 
--- |An XDR type defined with \"union\"
+-- | An XDR type defined with \"union\"
 class (XDR a, XDREnum (XDRDiscriminant a)) => XDRUnion a where
   type XDRDiscriminant a
-  -- |Split a union into its discriminant and body generator.
-  xdrSplitUnion :: a -> (XDR.Int, S.Put)
-  -- |Get the body of a union based on its discriminant.
-  xdrGetUnionArm :: XDR.Int -> S.Get a
 
-xdrDiscriminant :: XDRUnion a => a -> XDRDiscriminant a
+  -- | Split a union into its discriminant and body generator.
+  xdrSplitUnion :: a -> (XDR.Int, Put)
+
+  -- | Get the body of a union based on its discriminant.
+  xdrGetUnionArm :: XDR.Int -> Get a
+
+xdrDiscriminant :: (XDRUnion a) => a -> XDRDiscriminant a
 xdrDiscriminant = xdrToEnum' . fst . xdrSplitUnion
 
--- |Default implementation of 'xdrPut' for 'XDRUnion'.
-xdrPutUnion :: XDRUnion a => a -> S.Put
+-- | Default implementation of 'xdrPut' for 'XDRUnion'.
+xdrPutUnion :: (XDRUnion a) => a -> Put
 xdrPutUnion = uncurry ((>>) . xdrPut) . xdrSplitUnion
 
--- |Default implementation of 'xdrGet' for 'XDRUnion'.
-xdrGetUnion :: XDRUnion a => S.Get a
+-- | Default implementation of 'xdrGet' for 'XDRUnion'.
+xdrGetUnion :: (XDRUnion a) => Get a
 xdrGetUnion = xdrGet >>= xdrGetUnionArm
 
-instance XDR a => XDR (XDR.Optional a) where
-  xdrType = ('*':) . xdrType . fromJust
+instance (XDR a) => XDR (XDR.Optional a) where
+  xdrType = ('*' :) . xdrType . fromJust
   xdrPut = xdrPutUnion
   xdrGet = xdrGetUnion
 
-instance XDR a => XDRUnion (XDR.Optional a) where
+instance (XDR a) => XDRUnion (XDR.Optional a) where
   type XDRDiscriminant (XDR.Optional a) = XDR.Bool
   xdrSplitUnion Nothing = (0, return ())
   xdrSplitUnion (Just a) = (1, xdrPut a)
@@ -141,100 +153,104 @@ instance XDR a => XDRUnion (XDR.Optional a) where
   xdrGetUnionArm 1 = Just <$> xdrGet
   xdrGetUnionArm _ = fail $ "xdrGetUnion: invalid discriminant for " ++ xdrType (undefined :: XDR.Optional a)
 
-xdrPutPad :: XDR.Length -> S.Put
+xdrPutPad :: XDR.Length -> Put
 xdrPutPad n = case n `mod` 4 of
   0 -> return ()
-  1 -> S.putWord16host 0 >> S.putWord8 0
-  2 -> S.putWord16host 0
-  _ {- must be 3 -} -> S.putWord8 0
+  1 -> Serialize.putWord16host 0 >> Serialize.putWord8 0
+  2 -> Serialize.putWord16host 0
+  _ {- must be 3 -} -> Serialize.putWord8 0
 
-xdrGetPad :: XDR.Length -> S.Get ()
+xdrGetPad :: XDR.Length -> Get ()
 xdrGetPad n = case n `mod` 4 of
   0 -> return ()
   1 -> do
-    0 <- S.getWord16host
-    0 <- S.getWord8
+    0 <- Serialize.getWord16host
+    0 <- Serialize.getWord8
     return ()
   2 -> do
-    0 <- S.getWord16host
+    0 <- Serialize.getWord16host
     return ()
   _ {- must be 3 -} -> do
-    0 <- S.getWord8
+    0 <- Serialize.getWord8
     return ()
 
 bsLength :: BS.ByteString -> XDR.Length
 bsLength = fromIntegral . BS.length
 
-xdrPutByteString :: XDR.Length -> BS.ByteString -> S.Put
+xdrPutByteString :: XDR.Length -> BS.ByteString -> Put
 xdrPutByteString l b = do
   unless (bsLength b == l) $ error "xdrPutByteString: incorrect length"
-  S.putByteString b
+  Serialize.putByteString b
   xdrPutPad l
 
-xdrGetByteString :: XDR.Length -> S.Get BS.ByteString
+xdrGetByteString :: XDR.Length -> Get BS.ByteString
 xdrGetByteString l = do
-  b <- S.getByteString $ fromIntegral l
+  b <- Serialize.getByteString $ fromIntegral l
   xdrGetPad l
   return b
 
-fixedLength :: forall n a . KnownNat n => LengthArray 'EQ n a -> String -> String
+fixedLength :: forall n a. (KnownNat n) => LengthArray 'EQ n a -> String -> String
 fixedLength a = (++ ('[' : show (fixedLengthArrayLength a) ++ "]"))
 
-variableLength :: forall n a . KnownNat n => LengthArray 'LT n a -> String -> String
+variableLength :: forall n a. (KnownNat n) => LengthArray 'LT n a -> String -> String
 variableLength a
   | n == XDR.maxLength = (++ "<>")
   | otherwise = (++ ('<' : show n ++ ">"))
-  where n = fromIntegral $ boundedLengthArrayBound a
+ where
+  n = fromIntegral $ boundedLengthArrayBound a
 
-xdrGetBoundedArray :: forall n a . KnownNat n => (XDR.Length -> S.Get a) -> S.Get (LengthArray 'LT n a)
+xdrGetBoundedArray :: forall n a. (KnownNat n) => (XDR.Length -> Get a) -> Get (LengthArray 'LT n a)
 xdrGetBoundedArray g = do
   l <- xdrGet
   guard $ l <= fromIntegral (boundedLengthArrayBound (undefined :: LengthArray 'LT n a))
   unsafeLengthArray <$> g l
 
 instance (KnownNat n, XDR a) => XDR (LengthArray 'EQ n [a]) where
-  xdrType la = fixedLength la $ xdrType $ head $ unLengthArray la
+  xdrType la =
+    fixedLength la $ xdrType $ fromJust $ listToMaybe $ unLengthArray la
   xdrPut la = mapM_ xdrPut a where a = unLengthArray la
-  xdrGet = unsafeLengthArray <$>
-    replicateM (fromInteger (natVal (Proxy :: Proxy n))) xdrGet
+  xdrGet =
+    unsafeLengthArray <$> replicateM (fromInteger $ natVal $ Proxy @n) xdrGet
 
 instance (KnownNat n, XDR a) => XDR (LengthArray 'LT n [a]) where
-  xdrType la = variableLength la $ xdrType $ head $ unLengthArray la
+  xdrType la =
+    variableLength la $ xdrType $ fromJust $ listToMaybe $ unLengthArray la
   xdrPut la = do
     xdrPut (fromIntegral (length a) :: XDR.Length)
     mapM_ xdrPut a
-    where
+   where
     a = unLengthArray la
   xdrGet = xdrGetBoundedArray $ \l -> replicateM (fromIntegral l) xdrGet
 
-instance (KnownNat n, XDR a) => XDR (LengthArray 'EQ n (V.Vector a)) where
-  xdrType la = fixedLength la $ xdrType $ V.head $ unLengthArray la
+instance (KnownNat n, XDR a) => XDR (LengthArray 'EQ n (Vector a)) where
+  xdrType la = fixedLength la $ xdrType $ Vector.head $ unLengthArray la
   xdrPut la = mapM_ xdrPut a where a = unLengthArray la
-  xdrGet = unsafeLengthArray <$>
-    V.replicateM (fromInteger (natVal (Proxy :: Proxy n))) xdrGet
+  xdrGet =
+    unsafeLengthArray
+      <$> Vector.replicateM (fromInteger $ natVal $ Proxy @n) xdrGet
 
-instance (KnownNat n, XDR a) => XDR (LengthArray 'LT n (V.Vector a)) where
-  xdrType la = variableLength la $ xdrType $ V.head $ unLengthArray la
+instance (KnownNat n, XDR a) => XDR (LengthArray 'LT n (Vector a)) where
+  xdrType la = variableLength la $ xdrType $ Vector.head $ unLengthArray la
   xdrPut la = do
-    xdrPut (fromIntegral (V.length a) :: XDR.Length)
+    xdrPut (fromIntegral (length a) :: XDR.Length)
     mapM_ xdrPut a
-    where
+   where
     a = unLengthArray la
-  xdrGet = xdrGetBoundedArray $ \l -> V.replicateM (fromIntegral l) xdrGet
+  xdrGet = xdrGetBoundedArray $ \l -> Vector.replicateM (fromIntegral l) xdrGet
 
-instance KnownNat n => XDR (LengthArray 'EQ n BS.ByteString) where
+instance (KnownNat n) => XDR (LengthArray 'EQ n BS.ByteString) where
   xdrType o = fixedLength o "opaque"
   xdrPut o =
-    xdrPutByteString (fromInteger $ natVal (Proxy :: Proxy n)) $ unLengthArray o
-  xdrGet = unsafeLengthArray <$>
-    xdrGetByteString (fromInteger $ natVal (Proxy :: Proxy n))
+    xdrPutByteString (fromInteger $ natVal $ Proxy @n) $ unLengthArray o
+  xdrGet =
+    unsafeLengthArray <$> xdrGetByteString (fromInteger $ natVal $ Proxy @n)
 
-instance KnownNat n => XDR (LengthArray 'LT n BS.ByteString) where
+instance (KnownNat n) => XDR (LengthArray 'LT n BS.ByteString) where
   xdrType o = variableLength o "opaque"
   xdrPut o = do
     xdrPut l
     xdrPutByteString l b
-    where
+   where
     l = bsLength b
     b = unLengthArray o
   xdrGet = xdrGetBoundedArray xdrGetByteString
@@ -259,16 +275,16 @@ instance (XDR a, XDR b, XDR c, XDR d) => XDR (a, b, c, d) where
   xdrPut (a, b, c, d) = xdrPut a >> xdrPut b >> xdrPut c >> xdrPut d
   xdrGet = (,,,) <$> xdrGet <*> xdrGet <*> xdrGet <*> xdrGet
 
-xdrSerialize :: XDR a => a -> BS.ByteString
-xdrSerialize = S.runPut . xdrPut
+xdrSerialize :: (XDR a) => a -> BS.ByteString
+xdrSerialize = Serialize.runPut . xdrPut
 
-xdrSerializeLazy :: XDR a => a -> BSL.ByteString
-xdrSerializeLazy = S.runPutLazy . xdrPut
+xdrSerializeLazy :: (XDR a) => a -> BSL.ByteString
+xdrSerializeLazy = Serialize.runPutLazy . xdrPut
 
--- |@"S.runGet' 'xdrGet'@
-xdrDeserialize :: XDR a => BS.ByteString -> Either String a
-xdrDeserialize = S.runGet xdrGet
+-- | @"S.runGet' 'xdrGet'@
+xdrDeserialize :: (XDR a) => BS.ByteString -> Either String a
+xdrDeserialize = Serialize.runGet xdrGet
 
--- |@"S.runGetLazy' 'xdrGet'@
-xdrDeserializeLazy :: XDR a => BSL.ByteString -> Either String a
-xdrDeserializeLazy = S.runGetLazy xdrGet
+-- | @"S.runGetLazy' 'xdrGet'@
+xdrDeserializeLazy :: (XDR a) => BSL.ByteString -> Either String a
+xdrDeserializeLazy = Serialize.runGetLazy xdrGet
