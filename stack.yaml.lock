@@ -3,28 +3,10 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages:
-- completed:
-    commit: 6f634f6c1ecb2b4173dbe4f46d269ee612c68840
-    git: https://github.com/TomMD/cipher-aes128.git
-    name: cipher-aes128
-    pantry-tree:
-      sha256: 5bbac7c6721847b0b7459f430b4ca487ad86c1dc0f4b0e4967c035ccaf7e3830
-      size: 1557
-    version: 0.7.0.6
-  original:
-    commit: 6f634f6c1ecb2b4173dbe4f46d269ee612c68840
-    git: https://github.com/TomMD/cipher-aes128.git
-- completed:
-    hackage: DRBG-0.5.5@sha256:3b8040bed356e2b63927a27fb6d5adbd19d70c9e1d1bb66111bbeb33e56900eb,2259
-    pantry-tree:
-      sha256: 586ee2257b255cb7f2a3663711199f9de9e70445ce7cb192f5af07dd66eadac2
-      size: 896
-  original:
-    hackage: DRBG-0.5.5
+packages: []
 snapshots:
 - completed:
-    sha256: 5a59b2a405b3aba3c00188453be172b85893cab8ebc352b1ef58b0eae5d248a2
-    size: 650475
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/26.yaml
-  original: lts-20.26
+    sha256: a81fb3877c4f9031e1325eb3935122e608d80715dc16b586eb11ddbff8671ecd
+    size: 640086
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/25.yaml
+  original: lts-21.25

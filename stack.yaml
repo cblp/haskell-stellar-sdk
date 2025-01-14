@@ -1,11 +1,6 @@
-resolver: lts-20.26
+resolver: lts-21.25
 
 packages:
   - .
   - stellar-horizon
   - wallet
-
-extra-deps:
-  - git: https://github.com/TomMD/cipher-aes128.git
-    commit: 6f634f6c1ecb2b4173dbe4f46d269ee612c68840  # master 2022-11-16
-  - DRBG-0.5.5
